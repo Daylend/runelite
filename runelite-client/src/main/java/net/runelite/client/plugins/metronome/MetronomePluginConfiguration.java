@@ -53,4 +53,12 @@ public interface MetronomePluginConfiguration extends Config
 	{
 		return false;
 	}
+
+	@ConfigItem(
+			keyName = "enableGUI",
+			name = "Enable graphical representation",
+			description = "Toggles whether or not to show tick count",
+			position = 4
+	)
+	default boolean enableGUI() { return false; }
 }

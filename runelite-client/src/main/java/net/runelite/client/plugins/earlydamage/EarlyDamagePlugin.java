@@ -23,10 +23,10 @@ import net.runelite.client.task.Schedule;
 import net.runelite.client.ui.overlay.OverlayManager;
 
 @PluginDescriptor(
-        name = "XP Globes",
-        description = "Show XP globes for the respective skill when gaining XP",
-        tags = {"experience", "levels", "overlay"},
-        enabledByDefault = false
+        name = "Early Damage",
+        description = "Show damage before it hits",
+        tags = {"damage"},
+        enabledByDefault = true
 )
 @PluginDependency(XpTrackerPlugin.class)
 public class EarlyDamagePlugin extends Plugin

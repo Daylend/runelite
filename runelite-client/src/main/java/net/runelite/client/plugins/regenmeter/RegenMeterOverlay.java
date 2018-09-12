@@ -32,20 +32,24 @@ import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.Stroke;
 import java.awt.geom.Arc2D;
+import java.text.DecimalFormat;
 import javax.inject.Inject;
 import net.runelite.api.Client;
+import net.runelite.api.Point;
 import net.runelite.api.VarPlayer;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetInfo;
 import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayLayer;
 import net.runelite.client.ui.overlay.OverlayPosition;
+import net.runelite.client.ui.overlay.OverlayUtil;
 
 public class RegenMeterOverlay extends Overlay
 {
 	private static final Color HITPOINTS_COLOR = brighter(0x9B0703);
 	private static final Color SPECIAL_COLOR = brighter(0x1E95B0);
 	private static final Color OVERLAY_COLOR = new Color(255, 255, 255, 60);
+	private static final Color TEXT_COLOR = new Color(255,255,255);
 	private static final double DIAMETER = 26D;
 	private static final int OFFSET = 27;
 
@@ -112,10 +116,23 @@ public class RegenMeterOverlay extends Overlay
 		}
 		Rectangle bounds = widget.getBounds();
 
-		Arc2D.Double arc = new Arc2D.Double(bounds.x + OFFSET, bounds.y + (bounds.height / 2 - DIAMETER / 2), DIAMETER, DIAMETER, 88.d, -360.d * percent, Arc2D.OPEN);
+		Arc2D.Double arc = new Arc2D.Double(bounds.x + OFFSET, bounds.y +
+				(bounds.height / 2 - DIAMETER / 2), DIAMETER, DIAMETER, 88.d,
+				-360.d * percent, Arc2D.OPEN);
 		final Stroke STROKE = new BasicStroke(2f);
 		g.setStroke(STROKE);
 		g.setColor(color);
 		g.draw(arc);
+
+
+	if(plugin.getHitpointsPercentage()>0 && config.showRegenCountdown() && widgetInfo == WidgetInfo.MINIMAP_HEALTH_ORB)
+		{
+			Point widgetPoint = new Point(bounds.x + OFFSET + 6,(int)(bounds.y +
+					(bounds.height * 0.666)));
+			DecimalFormat df = new DecimalFormat("###");
+
+			OverlayUtil.renderTextLocation(g, widgetPoint,
+					df.format((1-plugin.getHitpointsPercentage())*0.6*100), color);
+		}
 	}
 }

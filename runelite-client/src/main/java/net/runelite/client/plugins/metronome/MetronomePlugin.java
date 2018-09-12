@@ -28,12 +28,18 @@ package net.runelite.client.plugins.metronome;
 import com.google.common.eventbus.Subscribe;
 import com.google.inject.Provides;
 import javax.inject.Inject;
+
+import lombok.Getter;
 import net.runelite.api.Client;
 import net.runelite.api.SoundEffectID;
 import net.runelite.api.events.GameTick;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
+import net.runelite.client.plugins.regenmeter.RegenMeterOverlay;
+import net.runelite.client.ui.overlay.OverlayManager;
+
+import java.time.Instant;
 
 @PluginDescriptor(
 	name = "Metronome",
@@ -47,9 +53,20 @@ public class MetronomePlugin extends Plugin
 	private Client client;
 
 	@Inject
+    private OverlayManager overlayManager;
+
+	@Inject
+    private MetronomeOverlay overlay;
+
+	@Inject
 	private MetronomePluginConfiguration config;
 
+	@Getter
 	private int tickCounter = 0;
+
+	@Getter
+    private Instant lastTick;
+
 	private boolean shouldTock = false;
 
 	@Provides
@@ -57,6 +74,18 @@ public class MetronomePlugin extends Plugin
 	{
 		return configManager.getConfig(MetronomePluginConfiguration.class);
 	}
+
+    @Override
+    protected void startUp() throws Exception
+    {
+        overlayManager.add(overlay);
+    }
+
+    @Override
+    protected void shutDown() throws Exception
+    {
+        overlayManager.remove(overlay);
+    }
 
 	@Subscribe
 	void onTick(GameTick tick)
@@ -78,5 +107,7 @@ public class MetronomePlugin extends Plugin
 			}
 			shouldTock = !shouldTock;
 		}
+
+		lastTick = Instant.now();
 	}
 }

@@ -30,13 +30,14 @@ public class EarlyDamageOverlay extends Overlay
     private final EarlyDamagePlugin plugin;
     private final EarlyDamageConfig config;
     private final XpTrackerService xpTrackerService;
+    private final PanelComponent panel = new PanelComponent();
 
     @Inject
     private EarlyDamageOverlay(
             Client client,
             EarlyDamagePlugin plugin,
             EarlyDamageConfig config,
-            XpTrackerService xpTrackerService,
+            XpTrackerService xpTrackerService)
     {
         this.client = client;
         this.plugin = plugin;
@@ -44,5 +45,16 @@ public class EarlyDamageOverlay extends Overlay
         this.xpTrackerService = xpTrackerService;
         setPosition(OverlayPosition.TOP_CENTER);
     }
-    )
+
+    @Override
+    public Dimension render(Graphics2D graphics)
+    {
+        panel.getChildren().clear();
+        panel.getChildren().add(LineComponent.builder()
+            .left("Damage: ")
+            .right("Test")
+            .build());
+
+        return panel.render(graphics);
+    }
 }

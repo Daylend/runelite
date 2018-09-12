@@ -57,4 +57,10 @@ public interface RegenMeterConfig extends Config
 	{
 		return false;
 	}
+
+	@ConfigItem(
+			keyName = "showRegenCountdown",
+			name = "Show regeneration time countdown",
+			description = "Shows the exact number of seconds until the hp regen tick. Useful at NMZ.")
+	default boolean showRegenCountdown() { return false; }
 }
