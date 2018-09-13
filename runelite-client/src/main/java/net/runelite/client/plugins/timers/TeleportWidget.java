@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, Adam <Adam@sigterm.info>
+ * Copyright (c) 2018, Jordan Atwood <jordan.atwood423@gmail.com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -22,39 +22,39 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-package net.runelite.http.service.xp;
+package net.runelite.client.plugins.timers;
 
-import java.io.IOException;
-import java.time.Instant;
-import java.util.concurrent.ExecutionException;
-import net.runelite.http.api.xp.XpData;
-import net.runelite.http.service.xp.beans.XpEntity;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import com.google.common.collect.ImmutableList;
+import java.util.Collection;
+import javax.annotation.Nullable;
+import net.runelite.api.widgets.WidgetInfo;
 
-@RestController
-@RequestMapping("/xp")
-public class XpTrackerController
+enum TeleportWidget
 {
-	@Autowired
-	private XpTrackerService xpTrackerService;
+	HOME_TELEPORT,
+	MINIGAME_TELEPORT;
 
-	@RequestMapping("/update")
-	public void update(@RequestParam String username) throws ExecutionException
-	{
-		xpTrackerService.update(username);
-	}
+	private static final Collection HOME_TELEPORT_IDS = ImmutableList.of(
+		WidgetInfo.SPELL_LUMBRIDGE_HOME_TELEPORT.getId(),
+		WidgetInfo.SPELL_EDGEVILLE_HOME_TELEPORT.getId(),
+		WidgetInfo.SPELL_LUNAR_HOME_TELEPORT.getId(),
+		WidgetInfo.SPELL_ARCEUUS_HOME_TELEPORT.getId()
+	);
+	private static final Collection MINIGAME_TELEPORT_IDS = ImmutableList.of(
+		WidgetInfo.MINIGAME_TELEPORT_BUTTON.getId()
+	);
 
-	@RequestMapping("/get")
-	public XpData get(@RequestParam String username, @RequestParam(required = false) Instant time) throws IOException
+	@Nullable
+	static TeleportWidget of(int widgetId)
 	{
-		if (time == null)
+		if (HOME_TELEPORT_IDS.contains(widgetId))
 		{
-			time = Instant.now();
+			return HOME_TELEPORT;
 		}
-		XpEntity xpEntity = xpTrackerService.findXpAtTime(username, time);
-		return XpMapper.INSTANCE.xpEntityToXpData(xpEntity);
+		else if (MINIGAME_TELEPORT_IDS.contains(widgetId))
+		{
+			return MINIGAME_TELEPORT;
+		}
+		return null;
 	}
 }
