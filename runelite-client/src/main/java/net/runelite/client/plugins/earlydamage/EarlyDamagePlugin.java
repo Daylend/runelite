@@ -26,7 +26,7 @@ import net.runelite.client.ui.overlay.OverlayManager;
         name = "Early Damage",
         description = "Show damage before it hits",
         tags = {"damage"},
-        enabledByDefault = true
+        enabledByDefault = false
 )
 @PluginDependency(XpTrackerPlugin.class)
 public class EarlyDamagePlugin extends Plugin
