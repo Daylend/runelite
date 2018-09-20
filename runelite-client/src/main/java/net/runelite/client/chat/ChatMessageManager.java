@@ -529,6 +529,9 @@ public class ChatMessageManager
 			return;
 		}
 
+		target.setName(target.getName());
+		target.setSender(target.getSender());
+
 		final boolean transparent = client.isResized() && client.getVar(Varbits.TRANSPARENT_CHATBOX) != 0;
 		final Collection<ChatColor> chatColors = colorCache.get(target.getType());
 
