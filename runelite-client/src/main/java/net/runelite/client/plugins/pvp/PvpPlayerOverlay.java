@@ -75,7 +75,7 @@ public class PvpPlayerOverlay extends Overlay
         List<Player> players = client.getPlayers();
         Player local = client.getLocalPlayer();
 
-        Widget wildWidget = client.getWidget(WidgetInfo.WILDERNESS_LEVEL);
+        Widget wildWidget = client.getWidget(WidgetInfo.PVP_WILDERNESS_LEVEL);
 
         // Death animation = 836
 
