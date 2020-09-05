@@ -43,6 +43,7 @@ import lombok.Getter;
 import net.runelite.client.ui.FontManager;
 import net.runelite.client.util.ImageUtil;
 import net.runelite.http.api.worlds.World;
+import net.runelite.http.api.worlds.WorldRegion;
 import net.runelite.http.api.worlds.WorldType;
 
 class WorldTableRow extends JPanel
@@ -54,13 +55,14 @@ class WorldTableRow extends JPanel
 
 	private static final int WORLD_COLUMN_WIDTH = 60;
 	private static final int PLAYERS_COLUMN_WIDTH = 40;
+	private static final int PING_COLUMN_WIDTH = 35;
 
 	private static final Color CURRENT_WORLD = new Color(66, 227, 17);
-	private static final Color UNAVAILABLE_WORLD = Color.GRAY.darker().darker();
 	private static final Color DANGEROUS_WORLD = new Color(251, 62, 62);
 	private static final Color TOURNAMENT_WORLD = new Color(79, 145, 255);
 	private static final Color MEMBERS_WORLD = new Color(210, 193, 53);
 	private static final Color FREE_WORLD = new Color(200, 200, 200);
+	private static final Color LEAGUE_WORLD = new Color(157, 237, 1);
 
 	static
 	{
@@ -75,6 +77,7 @@ class WorldTableRow extends JPanel
 	private JLabel worldField;
 	private JLabel playerCountField;
 	private JLabel activityField;
+	private JLabel pingField;
 	private BiConsumer<World, Boolean> onFavorite;
 
 	@Getter
@@ -83,10 +86,12 @@ class WorldTableRow extends JPanel
 	@Getter(AccessLevel.PACKAGE)
 	private int updatedPlayerCount;
 
+	private int ping;
+
 	private Color lastBackground;
 	private boolean current;
 
-	WorldTableRow(World world, boolean current, boolean favorite, Consumer<World> onSelect, BiConsumer<World, Boolean> onFavorite)
+	WorldTableRow(World world, boolean current, boolean favorite, Integer ping, Consumer<World> onSelect, BiConsumer<World, Boolean> onFavorite)
 	{
 		this.current = current;
 		this.world = world;
@@ -151,11 +156,17 @@ class WorldTableRow extends JPanel
 		setComponentPopupMenu(popupMenu);
 
 		JPanel leftSide = new JPanel(new BorderLayout());
+		JPanel rightSide = new JPanel(new BorderLayout());
 		leftSide.setOpaque(false);
+		rightSide.setOpaque(false);
 
 		JPanel worldField = buildWorldField();
 		worldField.setPreferredSize(new Dimension(WORLD_COLUMN_WIDTH, 0));
 		worldField.setOpaque(false);
+
+		JPanel pingField = buildPingField(ping);
+		pingField.setPreferredSize(new Dimension(PING_COLUMN_WIDTH, 0));
+		pingField.setOpaque(false);
 
 		JPanel playersField = buildPlayersField();
 		playersField.setPreferredSize(new Dimension(PLAYERS_COLUMN_WIDTH, 0));
@@ -168,10 +179,12 @@ class WorldTableRow extends JPanel
 		recolour(current);
 
 		leftSide.add(worldField, BorderLayout.WEST);
-		leftSide.add(playersField, BorderLayout.EAST);
+		leftSide.add(playersField, BorderLayout.CENTER);
+		rightSide.add(activityField, BorderLayout.CENTER);
+		rightSide.add(pingField, BorderLayout.EAST);
 
 		add(leftSide, BorderLayout.WEST);
-		add(activityField, BorderLayout.CENTER);
+		add(rightSide, BorderLayout.CENTER);
 	}
 
 	void setFavoriteMenu(boolean favorite)
@@ -199,9 +212,31 @@ class WorldTableRow extends JPanel
 		playerCountField.setText(String.valueOf(playerCount));
 	}
 
+	void setPing(int ping)
+	{
+		this.ping = ping;
+		pingField.setText(ping <= 0 ? "-" : Integer.toString(ping));
+	}
+
+	void hidePing()
+	{
+		pingField.setText("-");
+	}
+
+	void showPing()
+	{
+		setPing(ping); // to update pingField
+	}
+
+	int getPing()
+	{
+		return ping;
+	}
+
 	public void recolour(boolean current)
 	{
 		playerCountField.setForeground(current ? CURRENT_WORLD : Color.WHITE);
+		pingField.setForeground(current ? CURRENT_WORLD : Color.WHITE);
 
 		if (current)
 		{
@@ -210,11 +245,14 @@ class WorldTableRow extends JPanel
 			return;
 		}
 		else if (world.getTypes().contains(WorldType.PVP)
-			|| world.getTypes().contains(WorldType.PVP_HIGH_RISK)
-			|| world.getTypes().contains(WorldType.DEADMAN)
-			|| world.getTypes().contains(WorldType.SEASONAL_DEADMAN))
+			|| world.getTypes().contains(WorldType.HIGH_RISK)
+			|| world.getTypes().contains(WorldType.DEADMAN))
 		{
 			activityField.setForeground(DANGEROUS_WORLD);
+		}
+		else if (world.getTypes().contains(WorldType.LEAGUE))
+		{
+			activityField.setForeground(LEAGUE_WORLD);
 		}
 		else if (world.getTypes().contains(WorldType.TOURNAMENT))
 		{
@@ -240,6 +278,24 @@ class WorldTableRow extends JPanel
 		playerCountField.setFont(FontManager.getRunescapeSmallFont());
 
 		column.add(playerCountField, BorderLayout.WEST);
+
+		return column;
+	}
+
+	private JPanel buildPingField(Integer ping)
+	{
+		JPanel column = new JPanel(new BorderLayout());
+		column.setBorder(new EmptyBorder(0, 5, 0, 5));
+
+		pingField = new JLabel("-");
+		pingField.setFont(FontManager.getRunescapeSmallFont());
+
+		column.add(pingField, BorderLayout.EAST);
+
+		if (ping != null)
+		{
+			setPing(ping);
+		}
 
 		return column;
 	}
@@ -270,26 +326,36 @@ class WorldTableRow extends JPanel
 
 		worldField = new JLabel(world.getId() + "");
 
-		JLabel flag = new JLabel(getFlag(world.getLocation()));
-
-		column.add(flag, BorderLayout.WEST);
+		ImageIcon flagIcon = getFlag(world.getRegion());
+		if (flagIcon != null)
+		{
+			JLabel flag = new JLabel(flagIcon);
+			column.add(flag, BorderLayout.WEST);
+		}
 		column.add(worldField, BorderLayout.CENTER);
 
 		return column;
 	}
 
-	private ImageIcon getFlag(int locationId)
+	private static ImageIcon getFlag(WorldRegion region)
 	{
-		switch (locationId)
+		if (region == null)
 		{
-			case 0:
+			return null;
+		}
+
+		switch (region)
+		{
+			case UNITED_STATES_OF_AMERICA:
 				return FLAG_US;
-			case 1:
+			case UNITED_KINGDOM:
 				return FLAG_UK;
-			case 3:
+			case AUSTRALIA:
 				return FLAG_AUS;
-			default:
+			case GERMANY:
 				return FLAG_GER;
+			default:
+				return null;
 		}
 	}
 }

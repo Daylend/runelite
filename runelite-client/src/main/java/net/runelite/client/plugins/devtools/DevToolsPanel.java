@@ -25,31 +25,58 @@
  */
 package net.runelite.client.plugins.devtools;
 
-import java.awt.Color;
 import java.awt.GridLayout;
+import java.awt.TrayIcon;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import javax.inject.Inject;
 import javax.swing.JButton;
 import javax.swing.JPanel;
 import net.runelite.api.Client;
+import net.runelite.api.MenuAction;
+import net.runelite.client.Notifier;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.PluginPanel;
+import net.runelite.client.ui.overlay.OverlayMenuEntry;
+import net.runelite.client.ui.overlay.infobox.Counter;
+import net.runelite.client.ui.overlay.infobox.InfoBoxManager;
+import net.runelite.client.util.ImageUtil;
 
-public class DevToolsPanel extends PluginPanel
+class DevToolsPanel extends PluginPanel
 {
 	private final Client client;
+	private final Notifier notifier;
 	private final DevToolsPlugin plugin;
 
 	private final WidgetInspector widgetInspector;
 	private final VarInspector varInspector;
+	private final ScriptInspector scriptInspector;
+	private final InventoryInspector inventoryInspector;
+	private final InfoBoxManager infoBoxManager;
+	private final ScheduledExecutorService scheduledExecutorService;
 
 	@Inject
-	public DevToolsPanel(Client client, DevToolsPlugin plugin, WidgetInspector widgetInspector, VarInspector varInspector)
+	private DevToolsPanel(
+		Client client,
+		DevToolsPlugin plugin,
+		WidgetInspector widgetInspector,
+		VarInspector varInspector,
+		ScriptInspector scriptInspector,
+		InventoryInspector inventoryInspector,
+		Notifier notifier,
+		InfoBoxManager infoBoxManager,
+		ScheduledExecutorService scheduledExecutorService)
 	{
 		super();
 		this.client = client;
 		this.plugin = plugin;
 		this.widgetInspector = widgetInspector;
 		this.varInspector = varInspector;
+		this.inventoryInspector = inventoryInspector;
+		this.scriptInspector = scriptInspector;
+		this.notifier = notifier;
+		this.infoBoxManager = infoBoxManager;
+		this.scheduledExecutorService = scheduledExecutorService;
 
 		setBackground(ColorScheme.DARK_GRAY_COLOR);
 
@@ -62,196 +89,113 @@ public class DevToolsPanel extends PluginPanel
 		container.setBackground(ColorScheme.DARK_GRAY_COLOR);
 		container.setLayout(new GridLayout(0, 2, 3, 3));
 
-		final JButton renderPlayersBtn = new JButton("Players");
-		renderPlayersBtn.addActionListener(e ->
-		{
-			highlightButton(renderPlayersBtn);
-			plugin.togglePlayers();
-		});
-		container.add(renderPlayersBtn);
+		container.add(plugin.getPlayers());
+		container.add(plugin.getNpcs());
 
-		final JButton renderNpcsBtn = new JButton("NPCs");
-		renderNpcsBtn.addActionListener(e ->
-		{
-			highlightButton(renderNpcsBtn);
-			plugin.toggleNpcs();
-		});
-		container.add(renderNpcsBtn);
+		container.add(plugin.getGroundItems());
+		container.add(plugin.getGroundObjects());
+		container.add(plugin.getGameObjects());
+		container.add(plugin.getGraphicsObjects());
+		container.add(plugin.getWalls());
+		container.add(plugin.getDecorations());
 
-		final JButton renderGroundItemsBtn = new JButton("Ground Items");
-		renderGroundItemsBtn.addActionListener(e ->
-		{
-			highlightButton(renderGroundItemsBtn);
-			plugin.toggleGroundItems();
-		});
-		container.add(renderGroundItemsBtn);
+		container.add(plugin.getInventory());
+		container.add(plugin.getProjectiles());
 
-		final JButton renderGroundObjectsBtn = new JButton("Ground Objects");
-		renderGroundObjectsBtn.addActionListener(e ->
-		{
-			highlightButton(renderGroundObjectsBtn);
-			plugin.toggleGroundObjects();
-		});
-		container.add(renderGroundObjectsBtn);
+		container.add(plugin.getLocation());
+		container.add(plugin.getWorldMapLocation());
+		container.add(plugin.getTileLocation());
+		container.add(plugin.getCameraPosition());
 
-		final JButton renderGameObjectsBtn = new JButton("Game Objects");
-		renderGameObjectsBtn.addActionListener(e ->
-		{
-			highlightButton(renderGameObjectsBtn);
-			plugin.toggleGameObjects();
-		});
-		container.add(renderGameObjectsBtn);
+		container.add(plugin.getChunkBorders());
+		container.add(plugin.getMapSquares());
 
-		final JButton renderWallsBtn = new JButton("Walls");
-		renderWallsBtn.addActionListener(e ->
-		{
-			highlightButton(renderWallsBtn);
-			plugin.toggleWalls();
-		});
-		container.add(renderWallsBtn);
+		container.add(plugin.getLineOfSight());
+		container.add(plugin.getValidMovement());
+		container.add(plugin.getInteracting());
+		container.add(plugin.getExamine());
 
-		final JButton renderDecorBtn = new JButton("Decorations");
-		renderDecorBtn.addActionListener(e ->
+		container.add(plugin.getDetachedCamera());
+		plugin.getDetachedCamera().addActionListener((ev) ->
 		{
-			highlightButton(renderDecorBtn);
-			plugin.toggleDecor();
+			client.setOculusOrbState(!plugin.getDetachedCamera().isActive() ? 1 : 0);
+			client.setOculusOrbNormalSpeed(!plugin.getDetachedCamera().isActive() ? 36 : 12);
 		});
-		container.add(renderDecorBtn);
 
-		final JButton renderInventoryBtn = new JButton("Inventory");
-		renderInventoryBtn.addActionListener(e ->
+		container.add(plugin.getWidgetInspector());
+		plugin.getWidgetInspector().addActionListener((ev) ->
 		{
-			highlightButton(renderInventoryBtn);
-			plugin.toggleInventory();
+			if (plugin.getWidgetInspector().isActive())
+			{
+				widgetInspector.close();
+			}
+			else
+			{
+				widgetInspector.open();
+			}
 		});
-		container.add(renderInventoryBtn);
 
-		final JButton renderProjectilesBtn = new JButton("Projectiles");
-		renderProjectilesBtn.addActionListener(e ->
+		container.add(plugin.getVarInspector());
+		plugin.getVarInspector().addActionListener((ev) ->
 		{
-			highlightButton(renderProjectilesBtn);
-			plugin.toggleProjectiles();
+			if (plugin.getVarInspector().isActive())
+			{
+				varInspector.close();
+			}
+			else
+			{
+				varInspector.open();
+			}
 		});
-		container.add(renderProjectilesBtn);
 
-		final JButton renderLocationBtn = new JButton("Location");
-		renderLocationBtn.addActionListener(e ->
-		{
-			highlightButton(renderLocationBtn);
-			plugin.toggleLocation();
-		});
-		container.add(renderLocationBtn);
+		container.add(plugin.getSoundEffects());
 
-		final JButton widgetInspectorBtn = new JButton("Widget Tools");
-		widgetInspectorBtn.addActionListener(e ->
+		final JButton notificationBtn = new JButton("Notification");
+		notificationBtn.addActionListener(e ->
 		{
-			widgetInspector.setVisible(true);
-			widgetInspector.toFront();
-			widgetInspector.repaint();
+			scheduledExecutorService.schedule(() -> notifier.notify("Wow!", TrayIcon.MessageType.ERROR), 3, TimeUnit.SECONDS);
 		});
-		container.add(widgetInspectorBtn);
+		container.add(notificationBtn);
 
-		final JButton varInspectorBtn = new JButton("Var Tools");
-		varInspectorBtn.addActionListener(e ->
+		container.add(plugin.getScriptInspector());
+		plugin.getScriptInspector().addActionListener((ev) ->
 		{
-			varInspector.open();
+			if (plugin.getScriptInspector().isActive())
+			{
+				scriptInspector.close();
+			}
+			else
+			{
+				scriptInspector.open();
+			}
 		});
-		container.add(varInspectorBtn);
 
-		final JButton chunkBordersBtn = new JButton("Chunk borders");
-		chunkBordersBtn.addActionListener(e ->
+		final JButton newInfoboxBtn = new JButton("Infobox");
+		newInfoboxBtn.addActionListener(e ->
 		{
-			highlightButton(chunkBordersBtn);
-			plugin.toggleChunkBorders();
+			Counter counter = new Counter(ImageUtil.getResourceStreamFromClass(getClass(), "devtools_icon.png"), plugin, 42);
+			counter.getMenuEntries().add(new OverlayMenuEntry(MenuAction.RUNELITE_INFOBOX, "Test", "DevTools"));
+			infoBoxManager.addInfoBox(counter);
 		});
-		container.add(chunkBordersBtn);
+		container.add(newInfoboxBtn);
 
-		final JButton mapSquaresBtn = new JButton("Map squares");
-		mapSquaresBtn.addActionListener(e ->
-		{
-			highlightButton(mapSquaresBtn);
-			plugin.toggleMapSquares();
-		});
-		container.add(mapSquaresBtn);
+		final JButton clearInfoboxBtn = new JButton("Clear Infobox");
+		clearInfoboxBtn.addActionListener(e -> infoBoxManager.removeIf(i -> true));
+		container.add(clearInfoboxBtn);
 
-		final JButton validMovementBtn = new JButton("Valid Moves");
-		validMovementBtn.addActionListener(e ->
+		container.add(plugin.getInventoryInspector());
+		plugin.getInventoryInspector().addActionListener((ev) ->
 		{
-			highlightButton(validMovementBtn);
-			plugin.toggleValidMovement();
+			if (plugin.getInventoryInspector().isActive())
+			{
+				inventoryInspector.close();
+			}
+			else
+			{
+				inventoryInspector.open();
+			}
 		});
-		container.add(validMovementBtn);
-
-		final JButton lineOfSightBtn = new JButton("Line of Sight");
-		lineOfSightBtn.addActionListener(e ->
-		{
-			highlightButton(lineOfSightBtn);
-			plugin.toggleLineOfSight();
-		});
-		container.add(lineOfSightBtn);
-
-		final JButton graphicsObjectsBtn = new JButton("Graphics objects");
-		graphicsObjectsBtn.addActionListener(e ->
-		{
-			highlightButton(graphicsObjectsBtn);
-			plugin.toggleGraphicsObjects();
-		});
-		container.add(graphicsObjectsBtn);
-
-		final JButton cameraPositionBtn = new JButton("Camera Position");
-		cameraPositionBtn.addActionListener(e ->
-		{
-			highlightButton(cameraPositionBtn);
-			plugin.toggleCamera();
-		});
-		container.add(cameraPositionBtn);
-
-		final JButton worldMapBtn = new JButton("World Map Location");
-		worldMapBtn.addActionListener(e ->
-		{
-			highlightButton(worldMapBtn);
-			plugin.toggleWorldMapLocation();
-		});
-		container.add(worldMapBtn);
-
-		final JButton tileLocationBtn = new JButton("Tile Location Tooltip");
-		tileLocationBtn.addActionListener(e ->
-		{
-			highlightButton(tileLocationBtn);
-			plugin.toggleTileLocation();
-		});
-		container.add(tileLocationBtn);
-
-		final JButton oculusOrbBtn = new JButton("Detached camera");
-		oculusOrbBtn.addActionListener(e ->
-		{
-			highlightButton(oculusOrbBtn);
-			boolean enabled = oculusOrbBtn.getBackground().equals(Color.GREEN);
-			client.setOculusOrbState(enabled ? 1 : 0);
-			client.setOculusOrbNormalSpeed(enabled ? 36 : 12);
-		});
-		container.add(oculusOrbBtn);
-
-		final JButton interactingBtn = new JButton("Interacting");
-		interactingBtn.addActionListener(e ->
-		{
-			highlightButton(interactingBtn);
-			plugin.toggleInteracting();
-		});
-		container.add(interactingBtn);
 
 		return container;
-	}
-
-	private void highlightButton(JButton button)
-	{
-		if (button.getBackground().equals(Color.GREEN))
-		{
-			button.setBackground(null);
-		}
-		else
-		{
-			button.setBackground(Color.GREEN);
-		}
 	}
 }

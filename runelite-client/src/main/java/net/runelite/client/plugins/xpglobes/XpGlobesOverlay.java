@@ -27,6 +27,7 @@ package net.runelite.client.plugins.xpglobes;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Dimension;
+import java.awt.FontMetrics;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
@@ -36,32 +37,40 @@ import java.awt.geom.Ellipse2D;
 import java.awt.image.BufferedImage;
 import java.text.DecimalFormat;
 import java.time.Instant;
+import java.util.List;
 import javax.inject.Inject;
 import net.runelite.api.Client;
-import net.runelite.api.Experience;
+import static net.runelite.api.MenuAction.RUNELITE_OVERLAY_CONFIG;
 import net.runelite.api.Point;
 import net.runelite.client.game.SkillIconManager;
+import net.runelite.client.plugins.xptracker.XpActionType;
 import net.runelite.client.plugins.xptracker.XpTrackerService;
+import net.runelite.client.ui.SkillColor;
 import net.runelite.client.ui.overlay.Overlay;
+import static net.runelite.client.ui.overlay.OverlayManager.OPTION_CONFIGURE;
+import net.runelite.client.ui.overlay.OverlayMenuEntry;
 import net.runelite.client.ui.overlay.OverlayPosition;
+import net.runelite.client.ui.overlay.OverlayUtil;
 import net.runelite.client.ui.overlay.components.LineComponent;
 import net.runelite.client.ui.overlay.components.PanelComponent;
-import net.runelite.client.ui.overlay.components.ProgressBarComponent;
+import net.runelite.client.ui.overlay.tooltip.Tooltip;
+import net.runelite.client.ui.overlay.tooltip.TooltipManager;
 
 public class XpGlobesOverlay extends Overlay
 {
 	private static final int MINIMUM_STEP = 10;
 	private static final int PROGRESS_RADIUS_START = 90;
 	private static final int PROGRESS_RADIUS_REMAINDER = 0;
-	private static final int DEFAULT_START_Y = 10;
 	private static final int TOOLTIP_RECT_SIZE_X = 150;
+	private static final Color DARK_OVERLAY_COLOR = new Color(0, 0, 0, 180);
 
 	private final Client client;
 	private final XpGlobesPlugin plugin;
 	private final XpGlobesConfig config;
 	private final XpTrackerService xpTrackerService;
-	private final PanelComponent xpTooltip = new PanelComponent();
+	private final TooltipManager tooltipManager;
 	private final SkillIconManager iconManager;
+	private final Tooltip xpTooltip = new Tooltip(new PanelComponent());
 
 	@Inject
 	private XpGlobesOverlay(
@@ -69,29 +78,37 @@ public class XpGlobesOverlay extends Overlay
 		XpGlobesPlugin plugin,
 		XpGlobesConfig config,
 		XpTrackerService xpTrackerService,
-		SkillIconManager iconManager)
+		SkillIconManager iconManager,
+		TooltipManager tooltipManager)
 	{
+		super(plugin);
 		this.iconManager = iconManager;
 		this.client = client;
 		this.plugin = plugin;
 		this.config = config;
 		this.xpTrackerService = xpTrackerService;
+		this.tooltipManager = tooltipManager;
+		this.xpTooltip.getComponent().setPreferredSize(new Dimension(TOOLTIP_RECT_SIZE_X, 0));
 		setPosition(OverlayPosition.TOP_CENTER);
+		getMenuEntries().add(new OverlayMenuEntry(RUNELITE_OVERLAY_CONFIG, OPTION_CONFIGURE, "XP Globes overlay"));
 	}
 
 	@Override
 	public Dimension render(Graphics2D graphics)
 	{
-		final int queueSize = plugin.getXpGlobesSize();
+		final List<XpGlobe> xpGlobes = plugin.getXpGlobes();
+		final int queueSize = xpGlobes.size();
 		if (queueSize == 0)
 		{
 			return null;
 		}
 
 		int curDrawX = 0;
-		for (final XpGlobe xpGlobe : plugin.getXpGlobes())
+		for (final XpGlobe xpGlobe : xpGlobes)
 		{
-			renderProgressCircle(graphics, xpGlobe, curDrawX, 0, getBounds());
+			int startXp = xpTrackerService.getStartGoalXp(xpGlobe.getSkill());
+			int goalXp = xpTrackerService.getEndGoalXp(xpGlobe.getSkill());
+			renderProgressCircle(graphics, xpGlobe, startXp, goalXp, curDrawX, 0, getBounds());
 			curDrawX += MINIMUM_STEP + config.xpOrbSize();
 		}
 
@@ -100,14 +117,47 @@ public class XpGlobesOverlay extends Overlay
 		return new Dimension(markersLength, config.xpOrbSize());
 	}
 
-	private void renderProgressCircle(Graphics2D graphics, XpGlobe skillToDraw, int x, int y, Rectangle bounds)
+	private double getSkillProgress(int startXp, int currentXp, int goalXp)
 	{
-		double radiusCurrentXp = skillToDraw.getSkillProgressRadius();
+		double xpGained = currentXp - startXp;
+		double xpGoal = goalXp - startXp;
+
+		return ((xpGained / xpGoal) * 100);
+	}
+
+	private double getSkillProgressRadius(int startXp, int currentXp, int goalXp)
+	{
+		return -(3.6 * getSkillProgress(startXp, currentXp, goalXp)); //arc goes backwards
+	}
+
+	private void renderProgressCircle(Graphics2D graphics, XpGlobe skillToDraw, int startXp, int goalXp, int x, int y, Rectangle bounds)
+	{
+		double radiusCurrentXp = getSkillProgressRadius(startXp, skillToDraw.getCurrentXp(), goalXp);
 		double radiusToGoalXp = 360; //draw a circle
 
 		Ellipse2D backgroundCircle = drawEllipse(graphics, x, y);
 
-		Object renderHint = graphics.getRenderingHint(RenderingHints.KEY_STROKE_CONTROL);
+		drawSkillImage(graphics, skillToDraw, x, y);
+
+		Point mouse = client.getMouseCanvasPosition();
+		int mouseX = mouse.getX() - bounds.x;
+		int mouseY = mouse.getY() - bounds.y;
+
+		// If mouse is hovering the globe
+		if (backgroundCircle.contains(mouseX, mouseY))
+		{
+			// Fill a darker overlay circle
+			graphics.setColor(DARK_OVERLAY_COLOR);
+			graphics.fill(backgroundCircle);
+
+			drawProgressLabel(graphics, skillToDraw, startXp, goalXp, x, y);
+
+			if (config.enableTooltips())
+			{
+				drawTooltip(skillToDraw, goalXp);
+			}
+		}
+
 		graphics.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
 
 		drawProgressArc(
@@ -124,16 +174,24 @@ public class XpGlobesOverlay extends Overlay
 			config.xpOrbSize(), config.xpOrbSize(),
 			PROGRESS_RADIUS_START, radiusCurrentXp,
 			config.progressArcStrokeWidth(),
-			config.progressArcColor());
+			config.enableCustomArcColor() ? config.progressArcColor() : SkillColor.find(skillToDraw.getSkill()).getColor());
+	}
 
-		graphics.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, renderHint);
-
-		drawSkillImage(graphics, skillToDraw, x, y);
-
-		if (config.enableTooltips())
+	private void drawProgressLabel(Graphics2D graphics, XpGlobe globe, int startXp, int goalXp, int x, int y)
+	{
+		if (goalXp <= globe.getCurrentXp())
 		{
-			drawTooltipIfMouseover(graphics, skillToDraw, backgroundCircle, bounds);
+			return;
 		}
+
+		// Convert to int just to limit the decimal cases
+		String progress = (int) (getSkillProgress(startXp, globe.getCurrentXp(), goalXp)) + "%";
+
+		final FontMetrics metrics = graphics.getFontMetrics();
+		int drawX = x + (config.xpOrbSize() / 2) - (metrics.stringWidth(progress) / 2);
+		int drawY = y + (config.xpOrbSize() / 2) + (metrics.getHeight() / 2);
+
+		OverlayUtil.renderTextLocation(graphics, new Point(drawX, drawY), progress, Color.WHITE);
 	}
 
 	private void drawProgressArc(Graphics2D graphics, int x, int y, int w, int h, double radiusStart, double radiusEnd, int strokeWidth, Color color)
@@ -175,33 +233,19 @@ public class XpGlobesOverlay extends Overlay
 		);
 	}
 
-	private void drawTooltipIfMouseover(Graphics2D graphics, XpGlobe mouseOverSkill, Ellipse2D drawnGlobe, Rectangle bounds)
+	private void drawTooltip(XpGlobe mouseOverSkill, int goalXp)
 	{
-		Point mouse = client.getMouseCanvasPosition();
-		int mouseX = mouse.getX() - bounds.x;
-		int mouseY = mouse.getY() - bounds.y;
-
-		if (!drawnGlobe.contains(mouseX, mouseY))
-		{
-			return;
-		}
-
-		//draw tooltip under the globe of the mouse location
-		int x = (int) drawnGlobe.getX() - (TOOLTIP_RECT_SIZE_X / 2) + (config.xpOrbSize() / 2);
-		int y = (int) drawnGlobe.getY() + config.xpOrbSize() + 10;
-
 		// reset the timer on XpGlobe to prevent it from disappearing while hovered over it
 		mouseOverSkill.setTime(Instant.now());
 
-		String skillName = mouseOverSkill.getSkillName();
+		String skillName = mouseOverSkill.getSkill().getName();
 		String skillLevel = Integer.toString(mouseOverSkill.getCurrentLevel());
 
 		DecimalFormat decimalFormat = new DecimalFormat("###,###,###");
 		String skillCurrentXp = decimalFormat.format(mouseOverSkill.getCurrentXp());
 
+		final PanelComponent xpTooltip = (PanelComponent) this.xpTooltip.getComponent();
 		xpTooltip.getChildren().clear();
-		xpTooltip.setPreferredLocation(new java.awt.Point(x, y));
-		xpTooltip.setPreferredSize(new Dimension(TOOLTIP_RECT_SIZE_X, 0));
 
 		xpTooltip.getChildren().add(LineComponent.builder()
 			.left(skillName)
@@ -209,51 +253,55 @@ public class XpGlobesOverlay extends Overlay
 			.build());
 
 		xpTooltip.getChildren().add(LineComponent.builder()
-			.left("Current xp:")
+			.left("Current XP:")
 			.leftColor(Color.ORANGE)
 			.right(skillCurrentXp)
 			.build());
 
-		if (mouseOverSkill.getGoalXp() != -1)
+		if (goalXp > mouseOverSkill.getCurrentXp())
 		{
-			int actionsLeft = xpTrackerService.getActionsLeft(mouseOverSkill.getSkill());
-			if (actionsLeft != Integer.MAX_VALUE)
+			XpActionType xpActionType = xpTrackerService.getActionType(mouseOverSkill.getSkill());
+
+			if (config.showActionsLeft())
 			{
-				String actionsLeftString = decimalFormat.format(actionsLeft);
-				xpTooltip.getChildren().add(LineComponent.builder()
-					.left("Actions left:")
-					.leftColor(Color.ORANGE)
-					.right(actionsLeftString)
-					.build());
+				int actionsLeft = xpTrackerService.getActionsLeft(mouseOverSkill.getSkill());
+				if (actionsLeft != Integer.MAX_VALUE)
+				{
+					String actionsLeftString = decimalFormat.format(actionsLeft);
+					xpTooltip.getChildren().add(LineComponent.builder()
+							.left(xpActionType.getLabel() + " left:")
+							.leftColor(Color.ORANGE)
+							.right(actionsLeftString)
+							.build());
+				}
 			}
 
-			int xpLeft = mouseOverSkill.getGoalXp() - mouseOverSkill.getCurrentXp();
-			String skillXpToLvl = decimalFormat.format(xpLeft);
-			xpTooltip.getChildren().add(LineComponent.builder()
-				.left("Xp to level:")
-				.leftColor(Color.ORANGE)
-				.right(skillXpToLvl)
-				.build());
-
-			int xpHr = xpTrackerService.getXpHr(mouseOverSkill.getSkill());
-			if (xpHr != 0)
+			if (config.showXpLeft())
 			{
-				String xpHrString = decimalFormat.format(xpHr);
+				int xpLeft = goalXp - mouseOverSkill.getCurrentXp();
+				String skillXpToLvl = decimalFormat.format(xpLeft);
 				xpTooltip.getChildren().add(LineComponent.builder()
-					.left("Xp per hour:")
-					.leftColor(Color.ORANGE)
-					.right(xpHrString)
-					.build());
+						.left("XP left:")
+						.leftColor(Color.ORANGE)
+						.right(skillXpToLvl)
+						.build());
 			}
 
-			//Create progress bar for skill.
-			ProgressBarComponent progressBar = new ProgressBarComponent();
-			double progress = mouseOverSkill.getSkillProgress(Experience.getXpForLevel(mouseOverSkill.getCurrentLevel()),
-				mouseOverSkill.getCurrentXp(), mouseOverSkill.getGoalXp());
-			progressBar.setValue(progress);
-			xpTooltip.getChildren().add(progressBar);
+			if (config.showXpHour())
+			{
+				int xpHr = xpTrackerService.getXpHr(mouseOverSkill.getSkill());
+				if (xpHr != 0)
+				{
+					String xpHrString = decimalFormat.format(xpHr);
+					xpTooltip.getChildren().add(LineComponent.builder()
+							.left("XP per hour:")
+							.leftColor(Color.ORANGE)
+							.right(xpHrString)
+							.build());
+				}
+			}
 		}
 
-		xpTooltip.render(graphics);
+		tooltipManager.add(this.xpTooltip);
 	}
 }

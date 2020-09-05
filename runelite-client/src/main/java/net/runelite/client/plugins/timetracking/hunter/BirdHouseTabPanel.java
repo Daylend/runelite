@@ -136,7 +136,7 @@ public class BirdHouseTabPanel extends TabContentPanel
 					else
 					{
 						panel.getProgress().setValue((int) (BirdHouseTracker.BIRD_HOUSE_DURATION - remainingTime));
-						panel.getEstimate().setText("Done " + getFormattedEstimate(remainingTime, config.estimateRelative()));
+						panel.getEstimate().setText("Done " + getFormattedEstimate(remainingTime, config.timeFormatMode()));
 					}
 					break;
 				default:
@@ -144,8 +144,6 @@ public class BirdHouseTabPanel extends TabContentPanel
 					panel.getEstimate().setText("Unknown");
 					break;
 			}
-
-			panel.getProgress().update();
 		}
 	}
 }

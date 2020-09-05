@@ -28,6 +28,7 @@ import java.awt.Color;
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
+import net.runelite.client.config.Units;
 
 @ConfigGroup("xpdrop")
 public interface XpDropConfig extends Config
@@ -75,4 +76,17 @@ public interface XpDropConfig extends Config
 	{
 		return new Color(0x15, 0x80, 0xAD);
 	}
+
+	@ConfigItem(
+		keyName = "fakeXpDropDelay",
+		name = "Fake Xp Drop delay",
+		description = "Configures how many ticks should pass between fake XP drops, 0 to disable",
+		position = 4
+	)
+	@Units(Units.TICKS)
+	default int fakeXpDropDelay()
+	{
+		return 0;
+	}
+
 }

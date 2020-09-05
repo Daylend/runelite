@@ -43,12 +43,23 @@ public interface OpponentInfoConfig extends Config
 	}
 
 	@ConfigItem(
-		keyName = "showPercent",
-		name = "Show percent",
-		description = "Shows hitpoints as a percentage even if hitpoints are known",
+		keyName = "hitpointsDisplayStyle",
+		name = "Hitpoints display style",
+		description = "Show opponent's hitpoints as a value (if known), percentage, or both",
 		position = 1
 	)
-	default boolean showPercent()
+	default HitpointsDisplayStyle hitpointsDisplayStyle()
+	{
+		return HitpointsDisplayStyle.HITPOINTS;
+	}
+
+	@ConfigItem(
+		keyName = "showOpponentsInMenu",
+		name = "Show opponents in menu",
+		description = "Marks opponents names in the menu which you are attacking or are attacking you (NPC only)",
+		position = 3
+	)
+	default boolean showOpponentsInMenu()
 	{
 		return false;
 	}

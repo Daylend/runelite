@@ -26,10 +26,8 @@ package net.runelite.client.plugins.hiscore;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ObjectArrays;
-import com.google.common.eventbus.Subscribe;
 import com.google.inject.Provides;
 import java.awt.image.BufferedImage;
-import java.lang.reflect.InvocationTargetException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -42,16 +40,17 @@ import net.runelite.api.Client;
 import net.runelite.api.MenuAction;
 import net.runelite.api.MenuEntry;
 import net.runelite.api.events.ChatMessage;
-import net.runelite.api.events.ConfigChanged;
 import net.runelite.api.events.MenuEntryAdded;
 import net.runelite.api.events.PlayerMenuOptionClicked;
 import net.runelite.api.widgets.WidgetInfo;
 import net.runelite.client.config.ConfigManager;
+import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.menus.MenuManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
-import net.runelite.client.ui.NavigationButton;
 import net.runelite.client.ui.ClientToolbar;
+import net.runelite.client.ui.NavigationButton;
 import net.runelite.client.util.ImageUtil;
 import net.runelite.client.util.Text;
 import org.apache.commons.lang3.ArrayUtils;
@@ -66,8 +65,7 @@ public class HiscorePlugin extends Plugin
 {
 	private static final String LOOKUP = "Lookup";
 	private static final String KICK_OPTION = "Kick";
-	private static final ImmutableList<String> BEFORE_OPTIONS = ImmutableList.of("Add friend", "Remove friend", KICK_OPTION);
-	private static final ImmutableList<String> AFTER_OPTIONS = ImmutableList.of("Message");
+	private static final ImmutableList<String> AFTER_OPTIONS = ImmutableList.of("Message", "Add ignore", "Remove friend", "Delete", KICK_OPTION);
 	private static final Pattern BOUNTY_PATTERN = Pattern.compile("<col=ff0000>You've been assigned a target: (.*)</col>");
 
 	@Inject
@@ -88,9 +86,6 @@ public class HiscorePlugin extends Plugin
 
 	private NavigationButton navButton;
 	private HiscorePanel hiscorePanel;
-
-	@Inject
-	private NameAutocompleter autocompleter;
 
 	@Provides
 	HiscoreConfig provideConfig(ConfigManager configManager)
@@ -118,16 +113,12 @@ public class HiscorePlugin extends Plugin
 		{
 			menuManager.get().addPlayerMenuItem(LOOKUP);
 		}
-		if (config.autocomplete())
-		{
-			hiscorePanel.addInputKeyListener(autocompleter);
-		}
 	}
 
 	@Override
 	protected void shutDown() throws Exception
 	{
-		hiscorePanel.removeInputKeyListener(autocompleter);
+		hiscorePanel.shutdown();
 		clientToolbar.removeNavigation(navButton);
 
 		if (client != null)
@@ -150,18 +141,6 @@ public class HiscorePlugin extends Plugin
 					menuManager.get().addPlayerMenuItem(LOOKUP);
 				}
 			}
-
-			if (event.getKey().equals("autocomplete"))
-			{
-				if (config.autocomplete())
-				{
-					hiscorePanel.addInputKeyListener(autocompleter);
-				}
-				else
-				{
-					hiscorePanel.removeInputKeyListener(autocompleter);
-				}
-			}
 		}
 	}
 
@@ -176,21 +155,12 @@ public class HiscorePlugin extends Plugin
 		int groupId = WidgetInfo.TO_GROUP(event.getActionParam1());
 		String option = event.getOption();
 
-		if (groupId == WidgetInfo.FRIENDS_LIST.getGroupId() || groupId == WidgetInfo.CLAN_CHAT.getGroupId() ||
+		if (groupId == WidgetInfo.FRIENDS_LIST.getGroupId() || groupId == WidgetInfo.FRIENDS_CHAT.getGroupId() ||
 				groupId == WidgetInfo.CHATBOX.getGroupId() && !KICK_OPTION.equals(option) || //prevent from adding for Kick option (interferes with the raiding party one)
-				groupId == WidgetInfo.RAIDING_PARTY.getGroupId() || groupId == WidgetInfo.PRIVATE_CHAT_MESSAGE.getGroupId())
+				groupId == WidgetInfo.RAIDING_PARTY.getGroupId() || groupId == WidgetInfo.PRIVATE_CHAT_MESSAGE.getGroupId() ||
+				groupId == WidgetInfo.IGNORE_LIST.getGroupId())
 		{
-			boolean after;
-
-			if (AFTER_OPTIONS.contains(option))
-			{
-				after = true;
-			}
-			else if (BEFORE_OPTIONS.contains(option))
-			{
-				after = false;
-			}
-			else
+			if (!AFTER_OPTIONS.contains(option) || (option.equals("Delete") && groupId != WidgetInfo.IGNORE_LIST.getGroupId()))
 			{
 				return;
 			}
@@ -203,7 +173,7 @@ public class HiscorePlugin extends Plugin
 			lookup.setParam1(event.getActionParam1());
 			lookup.setIdentifier(event.getIdentifier());
 
-			insertMenuEntry(lookup, client.getMenuEntries(), after);
+			insertMenuEntry(lookup, client.getMenuEntries());
 		}
 	}
 
@@ -219,7 +189,7 @@ public class HiscorePlugin extends Plugin
 	@Subscribe
 	public void onChatMessage(ChatMessage event)
 	{
-		if (!config.bountylookup() || !event.getType().equals(ChatMessageType.SERVER))
+		if (!config.bountylookup() || !event.getType().equals(ChatMessageType.GAMEMESSAGE))
 		{
 			return;
 		}
@@ -232,38 +202,22 @@ public class HiscorePlugin extends Plugin
 		}
 	}
 
-	private void insertMenuEntry(MenuEntry newEntry, MenuEntry[] entries, boolean after)
+	private void insertMenuEntry(MenuEntry newEntry, MenuEntry[] entries)
 	{
 		MenuEntry[] newMenu = ObjectArrays.concat(entries, newEntry);
-
-		if (after)
-		{
-			int menuEntryCount = newMenu.length;
-			ArrayUtils.swap(newMenu, menuEntryCount - 1, menuEntryCount - 2);
-		}
-
+		int menuEntryCount = newMenu.length;
+		ArrayUtils.swap(newMenu, menuEntryCount - 1, menuEntryCount - 2);
 		client.setMenuEntries(newMenu);
 	}
 
 	private void lookupPlayer(String playerName)
 	{
-		executor.execute(() ->
+		SwingUtilities.invokeLater(() ->
 		{
-			try
+			if (!navButton.isSelected())
 			{
-				SwingUtilities.invokeAndWait(() ->
-				{
-					if (!navButton.isSelected())
-					{
-						navButton.getOnSelect().run();
-					}
-				});
+				navButton.getOnSelect().run();
 			}
-			catch (InterruptedException | InvocationTargetException e)
-			{
-				throw new RuntimeException(e);
-			}
-
 			hiscorePanel.lookup(playerName);
 		});
 	}

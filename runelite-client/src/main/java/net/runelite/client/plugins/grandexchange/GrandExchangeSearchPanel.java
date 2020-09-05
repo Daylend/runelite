@@ -32,36 +32,31 @@ import java.awt.Dimension;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
-import lombok.Setter;
-import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ItemComposition;
 import net.runelite.client.callback.ClientThread;
-import net.runelite.client.game.AsyncBufferedImage;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.components.IconTextField;
 import net.runelite.client.ui.components.PluginErrorPanel;
-import net.runelite.client.util.RunnableExceptionLogger;
-import net.runelite.http.api.item.Item;
-import net.runelite.http.api.item.SearchResult;
+import net.runelite.client.util.AsyncBufferedImage;
+import net.runelite.http.api.item.ItemPrice;
+import net.runelite.http.api.item.ItemStats;
 
 /**
  * This panel holds the search section of the Grand Exchange Plugin.
  * It should display a search bar and either item results or a error panel.
  */
-@Slf4j
 class GrandExchangeSearchPanel extends JPanel
 {
 	private static final String ERROR_PANEL = "ERROR_PANEL";
 	private static final String RESULTS_PANEL = "RESULTS_PANEL";
+	private static final int MAX_SEARCH_ITEMS = 100;
 
 	private final GridBagConstraints constraints = new GridBagConstraints();
 	private final CardLayout cardLayout = new CardLayout();
@@ -72,9 +67,6 @@ class GrandExchangeSearchPanel extends JPanel
 
 	private final IconTextField searchBar = new IconTextField();
 
-	/*  The main container, this holds the search bar and the center panel */
-	private final JPanel container = new JPanel();
-
 	/*  The results container, this will hold all the individual ge item panels */
 	private final JPanel searchItemsPanel = new JPanel();
 
@@ -84,36 +76,29 @@ class GrandExchangeSearchPanel extends JPanel
 	/*  The error panel, this displays an error message */
 	private final PluginErrorPanel errorPanel = new PluginErrorPanel();
 
-	/*  The results wrapper, this scrolling panel wraps the results container */
-	private JScrollPane resultsWrapper;
-
-	private List<GrandExchangeItems> itemsList = new ArrayList<>();
-
-	@Setter
-	private Map<Integer, Integer> itemGELimits = Collections.emptyMap();
+	private final List<GrandExchangeItems> itemsList = new ArrayList<>();
 
 	GrandExchangeSearchPanel(ClientThread clientThread, ItemManager itemManager, ScheduledExecutorService executor)
 	{
 		this.clientThread = clientThread;
 		this.itemManager = itemManager;
 		this.executor = executor;
-		init();
-	}
 
-	private void init()
-	{
 		setLayout(new BorderLayout());
 		setBackground(ColorScheme.DARK_GRAY_COLOR);
 
+		/*  The main container, this holds the search bar and the center panel */
+		JPanel container = new JPanel();
 		container.setLayout(new BorderLayout(5, 5));
 		container.setBorder(new EmptyBorder(10, 10, 10, 10));
 		container.setBackground(ColorScheme.DARK_GRAY_COLOR);
 
 		searchBar.setIcon(IconTextField.Icon.SEARCH);
 		searchBar.setPreferredSize(new Dimension(100, 30));
-		searchBar.setBackground(ColorScheme.MEDIUM_GRAY_COLOR);
-		searchBar.setHoverBackgroundColor(ColorScheme.MEDIUM_GRAY_COLOR.brighter());
-		searchBar.addActionListener(e -> executor.execute(RunnableExceptionLogger.wrap(() -> priceLookup(false))));
+		searchBar.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+		searchBar.setHoverBackgroundColor(ColorScheme.DARK_GRAY_HOVER_COLOR);
+		searchBar.addActionListener(e -> executor.execute(() -> priceLookup(false)));
+		searchBar.addClearListener(this::updateSearch);
 
 		searchItemsPanel.setLayout(new GridBagLayout());
 		searchItemsPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
@@ -128,7 +113,8 @@ class GrandExchangeSearchPanel extends JPanel
 		wrapper.setBackground(ColorScheme.DARK_GRAY_COLOR);
 		wrapper.add(searchItemsPanel, BorderLayout.NORTH);
 
-		resultsWrapper = new JScrollPane(wrapper);
+		/*  The results wrapper, this scrolling panel wraps the results container */
+		JScrollPane resultsWrapper = new JScrollPane(wrapper);
 		resultsWrapper.setBackground(ColorScheme.DARK_GRAY_COLOR);
 		resultsWrapper.getVerticalScrollBar().setPreferredSize(new Dimension(12, 0));
 		resultsWrapper.getVerticalScrollBar().setBorder(new EmptyBorder(0, 5, 0, 0));
@@ -156,10 +142,10 @@ class GrandExchangeSearchPanel extends JPanel
 	void priceLookup(String item)
 	{
 		searchBar.setText(item);
-		executor.execute(RunnableExceptionLogger.wrap(() -> priceLookup(true)));
+		executor.execute(() -> priceLookup(true));
 	}
 
-	private void priceLookup(boolean exactMatch)
+	private boolean updateSearch()
 	{
 		String lookup = searchBar.getText();
 
@@ -167,71 +153,70 @@ class GrandExchangeSearchPanel extends JPanel
 		{
 			searchItemsPanel.removeAll();
 			SwingUtilities.invokeLater(searchItemsPanel::updateUI);
-			return;
+			return false;
 		}
 
 		// Input is not empty, add searching label
 		searchItemsPanel.removeAll();
-		searchBar.setBackground(ColorScheme.MEDIUM_GRAY_COLOR);
+		searchBar.setBackground(ColorScheme.DARKER_GRAY_COLOR);
 		searchBar.setEditable(false);
 		searchBar.setIcon(IconTextField.Icon.LOADING);
+		return true;
+	}
 
-		SearchResult result;
-
-		try
+	private void priceLookup(boolean exactMatch)
+	{
+		if (!updateSearch())
 		{
-			result = itemManager.searchForItem(lookup);
-		}
-		catch (Exception ex) // handle com.google.common.cache.CacheLoader$InvalidCacheLoadException
-		{
-			log.warn("Unable to search for item {}", lookup, ex);
-			searchBar.setIcon(IconTextField.Icon.ERROR);
-			searchBar.setEditable(true);
-			errorPanel.setContent("Error fetching results", "An error occurred while trying to fetch item data, please try again later.");
-			cardLayout.show(centerPanel, ERROR_PANEL);
 			return;
 		}
 
-		// move to client thread to lookup item composition
-		clientThread.invokeLater(() -> processResult(result, lookup, exactMatch));
-	}
-
-	private void processResult(SearchResult result, String lookup, boolean exactMatch)
-	{
-		itemsList.clear();
-
-		if (result != null && !result.getItems().isEmpty())
-		{
-			cardLayout.show(centerPanel, RESULTS_PANEL);
-
-			for (Item item : result.getItems())
-			{
-				int itemId = item.getId();
-
-				ItemComposition itemComp = itemManager.getItemComposition(itemId);
-				if (itemComp == null)
-				{
-					continue;
-				}
-
-				int itemPrice = itemManager.getItemPrice(itemId);
-				int itemLimit = itemGELimits.getOrDefault(itemId, 0);
-				AsyncBufferedImage itemImage = itemManager.getImage(itemId);
-
-				itemsList.add(new GrandExchangeItems(itemImage, item.getName(), itemId, itemPrice, itemComp.getPrice() * 0.6, itemLimit));
-
-				// If using hotkey to lookup item, stop after finding match.
-				if (exactMatch && item.getName().equalsIgnoreCase(lookup))
-				{
-					break;
-				}
-			}
-		}
-		else
+		List<ItemPrice> result = itemManager.search(searchBar.getText());
+		if (result.isEmpty())
 		{
 			searchBar.setIcon(IconTextField.Icon.ERROR);
 			errorPanel.setContent("No results found.", "No items were found with that name, please try again.");
 			cardLayout.show(centerPanel, ERROR_PANEL);
+			searchBar.setEditable(true);
+			return;
+		}
+
+		// move to client thread to lookup item composition
+		clientThread.invokeLater(() -> processResult(result, searchBar.getText(), exactMatch));
+	}
+
+	private void processResult(List<ItemPrice> result, String lookup, boolean exactMatch)
+	{
+		itemsList.clear();
+
+		cardLayout.show(centerPanel, RESULTS_PANEL);
+
+		int count = 0;
+
+		for (ItemPrice item : result)
+		{
+			if (count++ > MAX_SEARCH_ITEMS)
+			{
+				// Cap search
+				break;
+			}
+
+			int itemId = item.getId();
+
+			ItemComposition itemComp = itemManager.getItemComposition(itemId);
+			ItemStats itemStats = itemManager.getItemStats(itemId, false);
+
+			int itemPrice = item.getPrice();
+			int itemLimit = itemStats != null ? itemStats.getGeLimit() : 0;
+			AsyncBufferedImage itemImage = itemManager.getImage(itemId);
+
+			itemsList.add(new GrandExchangeItems(itemImage, item.getName(), itemId, itemPrice, itemComp.getPrice() * 0.6, itemLimit));
+
+			// If using hotkey to lookup item, stop after finding match.
+			if (exactMatch && item.getName().equalsIgnoreCase(lookup))
+			{
+				break;
+			}
 		}
 
 		SwingUtilities.invokeLater(() ->

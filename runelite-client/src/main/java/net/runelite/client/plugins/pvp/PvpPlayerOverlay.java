@@ -130,7 +130,8 @@ public class PvpPlayerOverlay extends Overlay
     private void renderPlayer(Graphics2D graphics, Player player, Color color)
     {
         String text = player.getCombatLevel() + "  [" + player.getName() + "]";
-        Polygon playerClickbox = player.getConvexHull();
+        Shape playerClickbox = player.getConvexHull();
+
         Polygon tilePoly = Perspective.getCanvasTileAreaPoly(client, player.getLocalLocation(),1);
 
         if(tilePoly!=null && config.showNames())
@@ -189,7 +190,7 @@ public class PvpPlayerOverlay extends Overlay
 
         final int textWidth = graphics.getFontMetrics().stringWidth(timeLeftStr);
         final int textHeight = graphics.getFontMetrics().getAscent();
-        final Point canvasPoint = Perspective.worldToCanvas(client, deathPoint.getX(), deathPoint.getY(),
+        final Point canvasPoint = Perspective.localToCanvas(client, deathPoint.getX(), deathPoint.getY(),
             location.getPlane());
 
         if (canvasPoint != null)

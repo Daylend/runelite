@@ -27,6 +27,7 @@ package net.runelite.client.plugins.regenmeter;
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
+import net.runelite.client.config.Units;
 
 @ConfigGroup("regenmeter")
 public interface RegenMeterConfig extends Config
@@ -59,8 +60,13 @@ public interface RegenMeterConfig extends Config
 	}
 
 	@ConfigItem(
-			keyName = "showRegenCountdown",
-			name = "Show regeneration time countdown",
-			description = "Shows the exact number of seconds until the hp regen tick. Useful at NMZ.")
-	default boolean showRegenCountdown() { return false; }
+		keyName = "notifyBeforeHpRegenDuration",
+		name = "Hitpoint Regen Notification",
+		description = "Notify approximately when your next hitpoint is about to regen. A value of 0 will disable notification."
+	)
+	@Units(Units.SECONDS)
+	default int getNotifyBeforeHpRegenSeconds()
+	{
+		return 0;
+	}
 }

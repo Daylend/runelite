@@ -25,21 +25,15 @@
  */
 package net.runelite.client.plugins.metronome;
 
-import com.google.common.eventbus.Subscribe;
 import com.google.inject.Provides;
 import javax.inject.Inject;
-
-import lombok.Getter;
 import net.runelite.api.Client;
 import net.runelite.api.SoundEffectID;
 import net.runelite.api.events.GameTick;
 import net.runelite.client.config.ConfigManager;
+import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
-import net.runelite.client.plugins.regenmeter.RegenMeterOverlay;
-import net.runelite.client.ui.overlay.OverlayManager;
-
-import java.time.Instant;
 
 @PluginDescriptor(
 	name = "Metronome",
@@ -53,20 +47,9 @@ public class MetronomePlugin extends Plugin
 	private Client client;
 
 	@Inject
-    private OverlayManager overlayManager;
-
-	@Inject
-    private MetronomeOverlay overlay;
-
-	@Inject
 	private MetronomePluginConfiguration config;
 
-	@Getter
 	private int tickCounter = 0;
-
-	@Getter
-    private Instant lastTick;
-
 	private boolean shouldTock = false;
 
 	@Provides
@@ -75,20 +58,15 @@ public class MetronomePlugin extends Plugin
 		return configManager.getConfig(MetronomePluginConfiguration.class);
 	}
 
-    @Override
-    protected void startUp() throws Exception
-    {
-        overlayManager.add(overlay);
-    }
-
-    @Override
-    protected void shutDown() throws Exception
-    {
-        overlayManager.remove(overlay);
-    }
+	@Override
+	protected void shutDown()
+	{
+		tickCounter = 0;
+		shouldTock = false;
+	}
 
 	@Subscribe
-	void onTick(GameTick tick)
+	public void onGameTick(GameTick tick)
 	{
 		if (config.tickCount() == 0)
 		{
@@ -97,17 +75,24 @@ public class MetronomePlugin extends Plugin
 
 		if (++tickCounter % config.tickCount() == 0)
 		{
-			if (config.enableTock() && shouldTock)
+			// As playSoundEffect only uses the volume argument when the in-game volume isn't muted, sound effect volume
+			// needs to be set to the value desired for ticks or tocks and afterwards reset to the previous value.
+			int previousVolume = client.getSoundEffectVolume();
+
+			if (shouldTock && config.tockVolume() > 0)
 			{
-				client.playSoundEffect(SoundEffectID.GE_DECREMENT_PLOP);
+				client.setSoundEffectVolume(config.tockVolume());
+				client.playSoundEffect(SoundEffectID.GE_DECREMENT_PLOP, config.tockVolume());
 			}
-			else
+			else if (config.tickVolume() > 0)
 			{
-				client.playSoundEffect(SoundEffectID.GE_INCREMENT_PLOP);
+				client.setSoundEffectVolume(config.tickVolume());
+				client.playSoundEffect(SoundEffectID.GE_INCREMENT_PLOP, config.tickVolume());
 			}
+
+			client.setSoundEffectVolume(previousVolume);
+
 			shouldTock = !shouldTock;
 		}
-
-		lastTick = Instant.now();
 	}
 }

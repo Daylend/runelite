@@ -25,16 +25,16 @@
  */
 package net.runelite.client.plugins.entityhider;
 
-import com.google.common.eventbus.Subscribe;
 import com.google.inject.Provides;
 import javax.inject.Inject;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.Player;
 import net.runelite.api.coords.WorldPoint;
-import net.runelite.api.events.ConfigChanged;
+import net.runelite.client.events.ConfigChanged;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.client.config.ConfigManager;
+import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 
@@ -87,13 +87,15 @@ public class EntityHiderPlugin extends Plugin
 		client.setPlayersHidden2D(config.hidePlayers2D());
 
 		client.setFriendsHidden(config.hideFriends());
-		client.setClanMatesHidden(config.hideClanMates());
+		client.setFriendsChatMembersHidden(config.hideFriendsChatMembers());
 
 		client.setLocalPlayerHidden(config.hideLocalPlayer());
 		client.setLocalPlayerHidden2D(config.hideLocalPlayer2D());
 
 		client.setNPCsHidden(config.hideNPCs());
 		client.setNPCsHidden2D(config.hideNPCs2D());
+
+		client.setPetsHidden(config.hidePets());
 
 		client.setAttackersHidden(config.hideAttackers());
 
@@ -109,13 +111,15 @@ public class EntityHiderPlugin extends Plugin
 		client.setPlayersHidden2D(false);
 
 		client.setFriendsHidden(false);
-		client.setClanMatesHidden(false);
+		client.setFriendsChatMembersHidden(false);
 
 		client.setLocalPlayerHidden(false);
 		client.setLocalPlayerHidden2D(false);
 
 		client.setNPCsHidden(false);
 		client.setNPCsHidden2D(false);
+
+		client.setPetsHidden(false);
 
 		client.setAttackersHidden(false);
 
